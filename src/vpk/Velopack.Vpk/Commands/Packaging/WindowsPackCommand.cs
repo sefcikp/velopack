@@ -45,6 +45,8 @@ public class WindowsPackCommand : PackCommand
 
     public string MsiVersionOverride { get; private set; }
 
+    public string MsiUpgradeCode { get; private set; }
+
     public string Aumid { get; private set; }
 
     public WindowsPackCommand()
@@ -109,6 +111,10 @@ public class WindowsPackCommand : PackCommand
             AddOption<string>(v => MsiVersionOverride = v, ["--msiVersion"])
                 .SetDescription("Override the product version for the generated msi.")
                 .SetArgumentHelpName("VERSION");
+
+            AddOption<string>(v => MsiUpgradeCode = v, ["--msiUpgradeCode"])
+                .SetDescription("Set the UpgradeCode for the generated MSI. Defaults to a GUID derived from the pack ID.")
+                .SetArgumentHelpName("GUID");
 
             AddOption<FileInfo>(v => InstWelcome = v.ToFullNameOrNull(), ["--instWelcome"])
                 .SetDescription("Set the plain-text installer package welcome content.")
