@@ -41,6 +41,8 @@ public class WindowsPackOptions : WindowsReleasifyOptions, INugetPackCommand, IP
     public string MsiTopBanner { get; set; }
     public string MsiDialogBackground { get; set; }
 
+    public string[] MsiFragments { get; set; } = [];
+
     public bool BuildMsi { get; set; }
 
     public string MsiVersionOverride { get; set; }

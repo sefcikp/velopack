@@ -15,6 +15,14 @@ public sealed class WindowsPackOptionsValidator : PackOptionsValidator<WindowsPa
         RuleFor(x => x.SignParallel).InclusiveBetween(1, 1000);
         RuleFor(x => x.SignExclude).MustBeValidRegex();
         RuleFor(x => x.AzureTrustedSignFile).MustBeExistingFile();
+        RuleFor(x => x.MsiFragments)
+            .Must((options, paths) => paths == null || paths.Length == 0 || (options.BuildMsi && !options.NoInst))
+            .WithMessage("MSI fragments require --msi and cannot be combined with --noInst.");
+        RuleForEach(x => x.MsiFragments).Cascade(CascadeMode.Stop)
+            .NotEmpty()
+            .Must(File.Exists).WithMessage("MSI fragment '{PropertyValue}' must be an existing file.")
+            .Must(path => string.Equals(Path.GetExtension(path), ".wxs", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("MSI fragment '{PropertyValue}' must have a .wxs extension.");
         RuleFor(x => x.MsiVersionOverride).MustBeValidMsiVersion();
         RuleFor(x => x.MsiTopBanner).MustHaveExtension(".bmp");
         RuleFor(x => x.MsiDialogBackground).MustHaveExtension(".bmp");

@@ -23,6 +23,29 @@ public abstract class ReleaseCommandTests<T> : BaseCommandTests<T>
         => new WindowsPackOptionsValidator().Validate(options);
 
     [Fact]
+    public void MsiFragments_RepeatedOptions_MapAndValidate()
+    {
+        var first = CreateTempFile(name: "first fragment.wxs");
+        var second = CreateTempFile(name: "second.WXS");
+        var options = ParseAndMap(GetRequiredDefaultOptions() +
+            $"--msi --msiFragment \"{first.FullName}\" --msiFragment \"{second.FullName}\"");
+        Assert.Equal(new[] { first.FullName, second.FullName }, options.MsiFragments);
+        Assert.DoesNotContain(Validate(options).Errors, e => e.PropertyName.StartsWith("MsiFragments"));
+        options.BuildMsi = false;
+        Assert.Contains(Validate(options).Errors, e => e.PropertyName == "MsiFragments");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("missing.wxs")]
+    public void MsiFragments_InvalidFile_FailsValidation(string path)
+    {
+        var options = ParseAndMap(GetRequiredDefaultOptions() + "--msi");
+        options.MsiFragments = [path];
+        Assert.Contains(Validate(options).Errors, e => e.PropertyName.StartsWith("MsiFragments"));
+    }
+
+    [Fact]
     public void NoDelta_BareOption_SetsFlag()
     {
         var command = new T();

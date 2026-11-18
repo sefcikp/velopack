@@ -184,7 +184,8 @@
             <WixVariable Id="WixUISupportPerMachine" Value="0"/>
         {{/if}}
 
-        <Files Include="{{SourceDirectoryPath}}\**"/>
+        {{#if HasMsiFragments}}<ComponentGroupRef Id="VelopackMsiComponents"/>
+        {{/if}}<Files Include="{{SourceDirectoryPath}}\**"/>
 
         <!-- Binary resources for UI dialogs -->
         <Binary Id="RustDll" SourceFile="{{RustNativeModulePath}}"/>

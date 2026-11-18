@@ -1,5 +1,6 @@
 <Project>
   <PropertyGroup>
+    <VelopackBuildMsi Condition="'$(VelopackBuildMsi)' == ''">false</VelopackBuildMsi>
     <VelopackPackOnPublish Condition="$(VelopackPackOnPublish) == ''">true</VelopackPackOnPublish>
     <VelopackPushOnPublish Condition="$(VelopackPushOnPublish) == ''">false</VelopackPushOnPublish>
     <!-- https://learn.microsoft.com/visualstudio/msbuild/tutorial-custom-task-code-generation?view=vs-2022&WT.mc_id=DT-MVP-5003472#changes-required-to-multitarget -->
@@ -54,6 +55,8 @@
            Text="Only SelfContained=true releases are supported on Linux. Please dotnet publish with the --self-contained option." />
 
     <PackTask
+      BuildMsi="$(VelopackBuildMsi)"
+      MsiFragments="@(VelopackMsiFragment->'%(FullPath)')"
       SelfContained="$(SelfContained)"
       TargetFramework="$(TargetFramework)"
       TargetRuntime="$(VelopackTargetRuntime)"
