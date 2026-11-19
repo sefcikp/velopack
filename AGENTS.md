@@ -33,7 +33,7 @@ This repository is a public fork of [velopack/velopack](https://github.com/velop
 ## Releases
 
 - `version.json` on `custom/main` pins the version to `<base major.minor.patch>-custom.N` (e.g. `1.3.39-custom.1`); bump `N` on every release. Never publish packages under upstream's package ids to public feeds (nuget.org etc.).
-- Custom release versions are pinned: `pathFilters` excludes commits from the version height so the CLI banner matches the package version; the commit is retained in assembly metadata.
+- Custom release versions use an explicit zero revision in `version.json` (e.g. `1.3.39.0-custom.2`) to prevent Git height from changing the CLI version. NuGet and the CLI normalize the zero revision away; the commit is retained in assembly metadata.
 - The custom changes are managed (C#) only. A custom release is the official upstream binaries of the base tag (native helpers inside the `vpk` package, and the separate `velopack_libc` SDK) plus the custom managed code. Do not build or replace Rust/native binaries unless a change needs it.
 - Build the `vpk` tool package with `custom/build-vpk.ps1` (Windows, PowerShell 7, .NET SDK, no Rust). It takes the native helpers from the official upstream `vpk` package of `-UpstreamVersion`, packs them next to the custom managed code, checks that they are byte-identical to the official ones, and smoke-tests the result. Record the base tag in the release notes.
 - Consumers keep `major.minor.patch` of the tool and of the `velopack_libc` SDK equal (both come from the same base tag).

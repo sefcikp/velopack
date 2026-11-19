@@ -50,7 +50,8 @@ Write-Host "Vendor files expected by the pack step: $($vendorFiles -join ', ')"
 
 # Expected version: version.json (3-part version, prerelease tag = custom.N).
 $versionJson = Get-Content (Join-Path $repoRoot 'version.json') -Raw | ConvertFrom-Json
-$expectedVersion = $versionJson.version
+# An explicit zero revision prevents NBGV from inserting Git height; NuGet normalizes it away.
+$expectedVersion = $versionJson.version -replace '^(\d+\.\d+\.\d+)\.0-', '$1-'
 if ($expectedVersion -notmatch '^\d+\.\d+\.\d+-custom\.\d+$') {
     throw "version.json version '$expectedVersion' must look like <major>.<minor>.<patch>-custom.<N>"
 }
