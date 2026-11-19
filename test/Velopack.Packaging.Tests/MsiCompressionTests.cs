@@ -71,9 +71,9 @@ public class MsiCompressionTests
                          Scope="perUserOrMachine"
                          {{/if}}
                          UpgradeCode="{{UpgradeCodeGuid}}">
-            
+
                     <Media Id="1" Cabinet="app.cab" EmbedCab="yes"/>
-            
+
                     <!-- Authored explicitly (rather than relying on WiX's implicit default) because the upgrade-aware
                          cleanup depends on RemoveExistingProducts running right after InstallValidate, before any
                          new files are laid down. Same-version upgrades are allowed because the msi version drops the
@@ -81,7 +81,7 @@ public class MsiCompressionTests
                          side by side. The downgrade message is localized by RustSetLocaleStrings. -->
                     <MajorUpgrade Schedule="afterInstallValidate" AllowSameVersionUpgrades="yes"
                                   DowngradeErrorMessage="[MsiDowngradeError]"/>
-            
+
                     <StandardDirectory Id="TARGETDIR">
                         <Directory Id="INSTALLFOLDER" Name="{{AppTitleSanitized}}" ComponentGuidGenerationSeed="{{ComponentGenerationSeedGuid}}">
                             {{!-- CURRENTFOLDER only names current\ for the --noStub shortcut WorkingDirectory. The harvested
@@ -91,7 +91,7 @@ public class MsiCompressionTests
                             <Directory Id="PACKAGES_DIR" Name="packages"/>
                         </Directory>
                     </StandardDirectory>
-            
+
                     {{#if DesktopShortcut}}
                         <StandardDirectory Id="DesktopFolder">
                             <Component Id="ApplicationDesktopShortcut">
@@ -103,7 +103,7 @@ public class MsiCompressionTests
                             </Component>
                         </StandardDirectory>
                     {{/if}}
-            
+
                     {{#if StartMenuShortcut}}
                         <!-- Shortcut is placed in Start > Programs > AppPublisher -->
                         <StandardDirectory Id="ProgramMenuFolder">
@@ -123,7 +123,7 @@ public class MsiCompressionTests
                             </Component>
                         </DirectoryRef>
                     {{/if}}
-            
+
                     {{#if StartMenuRootShortcut}}
                         <!-- Shortcut is placed directly in Start > Programs -->
                         <StandardDirectory Id="ProgramMenuFolder">
@@ -139,7 +139,7 @@ public class MsiCompressionTests
                             </Component>
                         </StandardDirectory>
                     {{/if}}
-            
+
                     {{#if StartupShortcut}}
                         <StandardDirectory Id="StartupFolder">
                             <Component Id="ApplicationStartupShortcut">
@@ -152,11 +152,11 @@ public class MsiCompressionTests
                             </Component>
                         </StandardDirectory>
                     {{/if}}
-            
+
                     {{#if HasIcon}}
                         <Icon Id="appicon" SourceFile="{{IconPath}}"/>
                     {{/if}}
-            
+
                     <!-- Suppress MSI's default ARP entry (always goes to HKLM regardless of per-user context)
                          and write our own using HKMU (resolves to HKCU for per-user, HKLM for per-machine) -->
                     <Property Id="ARPSYSTEMCOMPONENT" Value="1"/>
@@ -175,28 +175,28 @@ public class MsiCompressionTests
                             </RegistryKey>
                         </Component>
                     </DirectoryRef>
-            
+
                     {{#if HasLicense}}
                         <WixVariable Id="WixUILicenseRtf" Value="{{LicenseRtfFilePath}}"/>
                     {{/if}}
-            
+
                     {{#if HasWelcomeMessage}}
                         <Property Id="MsiWelcomeDescription" Value="{{{WelcomeMessage}}}"/>
                     {{/if}}
-            
+
                     {{#if HasReadme}}
                         <WixVariable Id="WixUIReadmeRtf" Value="{{ReadmeRtfFilePath}}"/>
                     {{/if}}
-            
+
                     {{#if HasConclusionMessage}}
                         <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="{{{ConclusionMessage}}}"/>
                     {{/if}}
-            
+
                     <!-- Default checked state of launch app check box to true -->
                     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1"/>
-            
+
                     <!-- WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT is set at runtime by RustSetLocaleStrings -->
-            
+
                     {{#if InstallLocationCurrentUserOnly}}
                     <Property Id="WixAppFolder" Value="WixPerUserFolder"/>
                     {{else}}
@@ -204,7 +204,7 @@ public class MsiCompressionTests
                     {{/if}}
                     <Property Id="ApplicationFolderName" Value="{{AppId}}"/>
                     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER"/>
-            
+
                     <!-- Optional install-dir override for sysadmins, e.g. msiexec /i app.msi VELOPACK_INSTALLDIR="D:\App".
                          When set, the forced default path (LocalAppData/ProgramFiles) is skipped in both UI and silent
                          installs. Secure so it survives the UI -> execute sequence handoff for elevated per-machine installs.
@@ -213,7 +213,7 @@ public class MsiCompressionTests
                     <Property Id="VELOPACK_INSTALLDIR" Secure="yes"/>
                     <SetProperty Id="INSTALLFOLDER" Value="[VELOPACK_INSTALLDIR]" Before="CostFinalize" Sequence="execute"
                                  Condition="VELOPACK_INSTALLDIR AND NOT Installed"/>
-            
+
                     <!-- Quiet/passive/reduced installs (UILevel < 5) never run the UI publishes that set the
                          default INSTALLFOLDER, which would otherwise resolve to {ROOTDRIVE}\{AppTitle}. Apply
                          the same defaults here: the forced location for single-scope packages; per-user for
@@ -234,7 +234,7 @@ public class MsiCompressionTests
                                      Value="{{ProgramFilesFolderName}}[ApplicationFolderName]" Before="CostFinalize" Sequence="execute"
                                      Condition="NOT Installed AND NOT VELOPACK_INSTALLDIR AND UILevel&lt;5 AND ALLUSERS=1"/>
                     {{/if}}
-            
+
                     {{#if InstallLocationEither}}
                         <WixVariable Id="WixUISupportPerUser" Value="1"/>
                         <WixVariable Id="WixUISupportPerMachine" Value="1"/>
@@ -242,9 +242,9 @@ public class MsiCompressionTests
                         <WixVariable Id="WixUISupportPerUser" Value="0"/>
                         <WixVariable Id="WixUISupportPerMachine" Value="0"/>
                     {{/if}}
-            
+
                     <Files Include="{{SourceDirectoryPath}}\**"/>
-            
+
                     <!-- Binary resources for UI dialogs -->
                     <Binary Id="RustDll" SourceFile="{{RustNativeModulePath}}"/>
                     <Binary Id="WixUI_Bmp_Banner" SourceFile="{{BannerBmpPath}}"/>
@@ -252,7 +252,7 @@ public class MsiCompressionTests
                     <Binary Id="WixUI_Ico_Exclam" SourceFile="{{ExclamIcoPath}}"/>
                     <Binary Id="WixUI_Bmp_Up" SourceFile="{{UpIcoPath}}"/>
                     <Binary Id="WixUI_Bmp_New" SourceFile="{{NewIcoPath}}"/>
-            
+
                     <!-- MSI properties for app metadata (used by Rust custom actions) -->
                     <!-- Must be the pack ID (not the title): cleanup uses it to locate the %LocalAppData%
                          fallback dir, the velopack temp dir and the MSI:{AppId} ARP key -->
@@ -264,7 +264,7 @@ public class MsiCompressionTests
                     {{/if}}
                     <Property Id="RustStubFileName" Value="{{LaunchFileName}}"/>
                     <Property Id="RustMainExeFileName" Value="{{MainExeFileName}}"/>
-            
+
                     <!-- Custom actions -->
                     <CustomAction Id="RustSetLocaleStrings" BinaryRef="RustDll" DllEntry="RustSetLocaleStrings" Execute="immediate" Return="check"/>
                     <CustomAction Id="RustValidatePath" BinaryRef="RustDll" DllEntry="ValidatePath" Execute="immediate" Return="check"/>
@@ -286,7 +286,7 @@ public class MsiCompressionTests
                                   Return="ignore"/>
                     <CustomAction Id="RustLaunchApplication" BinaryRef="RustDll" DllEntry="LaunchApplication" Impersonate="yes" Execute="immediate"
                                   Return="ignore"/>
-            
+
                     <!-- Install/uninstall hooks: run app exe with lifecycle flags -->
                     <CustomAction Id="SetInstallHookData" Property="InstallHookDeferred"
                                   Value="[INSTALLFOLDER]&quot;[RustMainExeFileName]&quot;[RustAppVersion]" Execute="immediate" Return="check"/>
@@ -300,7 +300,7 @@ public class MsiCompressionTests
                                   Value="[INSTALLFOLDER]&quot;[RustMainExeFileName]&quot;[RustAppVersion]" Execute="immediate" Return="check"/>
                     <CustomAction Id="UninstallHookDeferred" BinaryRef="RustDll" DllEntry="UninstallHookDeferred" Execute="deferred"
                                   Impersonate="yes" Return="ignore"/>
-            
+
                     <!-- Channel promotion tag: reads the channel override from the MSI's own Authenticode
                          signature and patches current\sq.version. Runs on install and repair; never fails
                          the install. -->
@@ -308,12 +308,12 @@ public class MsiCompressionTests
                                   Value="[OriginalDatabase]&quot;[INSTALLFOLDER]" Execute="immediate" Return="check"/>
                     <CustomAction Id="PatchChannelDeferred" BinaryRef="RustDll" DllEntry="PatchChannelDeferred"
                                   Execute="deferred" Impersonate="no" Return="ignore"/>
-            
+
                     <InstallUISequence>
                         <Custom Action="RustSetLocaleStrings" Before="AppSearch"/>
                         <Custom Action="RustEarlyBootstrap" After="RustSetLocaleStrings" Condition="NOT REMOVE AND RustRuntimeDependencies"/>
                     </InstallUISequence>
-            
+
                     <InstallExecuteSequence>
                         <!-- Also in the execute sequence so silent installs (no UI sequence) get the localized downgrade
                              message. Private properties set in the UI sequence do not carry over, so this sets them again.
@@ -343,15 +343,15 @@ public class MsiCompressionTests
                         <Custom Action="UserRustCleanup" After="RustCleanup"
                                 Condition="(REMOVE=&quot;ALL&quot;) AND NOT UPGRADINGPRODUCTCODE"/>
                     </InstallExecuteSequence>
-            
+
                     <UI>
                         <TextStyle Id="WixUI_Font_Normal" FaceName="Segoe UI" Size="8"/>
                         <TextStyle Id="WixUI_Font_Bigger" FaceName="Segoe UI" Size="12"/>
                         <TextStyle Id="WixUI_Font_Title" FaceName="Segoe UI" Size="9" Bold="yes"/>
                         <TextStyle Id="WixUI_Font_Emphasized" FaceName="Segoe UI" Size="8" Bold="yes"/>
-            
+
                         <Property Id="DefaultUIFont" Value="WixUI_Font_Normal"/>
-            
+
                         <DialogRef Id="BrowseDlg"/>
                         <DialogRef Id="DiskCostDlg"/>
                         <DialogRef Id="ErrorDlg"/>
@@ -366,22 +366,22 @@ public class MsiCompressionTests
                         {{#if HasReadme}}
                             <DialogRef Id="ReadmeDlg"/>
                         {{/if}}
-            
+
                         <!-- ValidatePath actions for BrowseDlg and InstallScopeDlg -->
                         <Publish Dialog="BrowseDlg" Control="OK" Event="DoAction" Value="RustValidatePath" Order="3"
                                  Condition="NOT WIXUI_DONTVALIDATEPATH"/>
                         <Publish Dialog="BrowseDlg" Control="OK" Event="SpawnDialog" Value="InvalidDirDlg" Order="4"
                                  Condition="NOT WIXUI_DONTVALIDATEPATH AND WIXUI_INSTALLDIR_VALID&lt;&gt;&quot;1&quot;"/>
-            
+
                         {{#if InstallLocationEither}}
                             <Publish Dialog="InstallScopeDlg" Control="Next" Event="DoAction" Value="RustValidatePath"
                                      Order="7" Condition="NOT WIXUI_DONTVALIDATEPATH"/>
                         {{/if}}
-            
+
                         <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999"/>
                         <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="RustLaunchApplication"
                                  Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed"/>
-            
+
                         {{!-- Welcome -> (Readme | License | InstallScope | VerifyReady) --}}
                         {{#if HasReadme}}
                             <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="ReadmeDlg" Condition="NOT Installed"/>
@@ -392,9 +392,9 @@ public class MsiCompressionTests
                         {{else}}
                             <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Condition="NOT Installed"/>
                         {{/if}}
-            
+
                         <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Condition="Installed AND PATCH"/>
-            
+
                         {{#if HasReadme}}
                             <Publish Dialog="ReadmeDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg"/>
                             {{#if HasLicense}}
@@ -405,7 +405,7 @@ public class MsiCompressionTests
                                 <Publish Dialog="ReadmeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg"/>
                             {{/if}}
                         {{/if}}
-            
+
                         {{#if HasLicense}}
                             {{#if HasReadme}}
                                 <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="ReadmeDlg"/>
@@ -420,7 +420,7 @@ public class MsiCompressionTests
                                          Condition="LicenseAccepted = &quot;1&quot;"/>
                             {{/if}}
                         {{/if}}
-            
+
                         {{#if InstallLocationEither}}
                             {{#if HasLicense}}
                                 <Publish Dialog="InstallScopeDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg"/>
@@ -455,7 +455,7 @@ public class MsiCompressionTests
                             <Publish Dialog="InstallScopeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="8"/>
                             <Publish Dialog="InstallScopeDlg" Control="Next" Event="DoAction" Value="FindRelatedProducts" Order="9"/>
                         {{/if}}
-            
+
                         {{#if InstallLocationCurrentUserOnly}}
                             <Publish Dialog="WelcomeDlg" Control="Next" Property="INSTALLFOLDER"
                                      Value="[LocalAppDataFolder][ApplicationFolderName]" Order="1"
@@ -464,7 +464,7 @@ public class MsiCompressionTests
                                      Value="[VELOPACK_INSTALLDIR]" Order="1" Condition="VELOPACK_INSTALLDIR"/>
                             <Publish Dialog="WelcomeDlg" Control="Next" Event="SetTargetPath" Value="INSTALLFOLDER" Order="2"/>
                         {{/if}}
-            
+
                         {{#if InstallLocationAllUsersOnly}}
                             <Publish Dialog="WelcomeDlg" Control="Next" Property="INSTALLFOLDER"
                                      Value="{{ProgramFilesFolderName}}[ApplicationFolderName]" Order="1"
@@ -473,7 +473,7 @@ public class MsiCompressionTests
                                      Value="[VELOPACK_INSTALLDIR]" Order="1" Condition="VELOPACK_INSTALLDIR"/>
                             <Publish Dialog="WelcomeDlg" Control="Next" Event="SetTargetPath" Value="INSTALLFOLDER" Order="2"/>
                         {{/if}}
-            
+
                         {{#if InstallLocationEither}}
                             <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="InstallScopeDlg" Order="1"
                                      Condition="NOT Installed"/>
@@ -487,17 +487,17 @@ public class MsiCompressionTests
                             <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="1"
                                      Condition="NOT Installed"/>
                         {{/if}}
-            
+
                         <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="2"
                                  Condition="Installed AND NOT PATCH"/>
                         <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2"
                                  Condition="Installed AND PATCH"/>
-            
+
                         <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg"/>
                         <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg"/>
                         <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg"/>
                         <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg"/>
-            
+
                         <Property Id="ARPNOMODIFY" Value="1"/>
                     </UI>
                 </Package>
