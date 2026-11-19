@@ -4,6 +4,9 @@
   "gitCommitIdShortFixedLength": 7,
   "publicReleaseRefSpec": ["^refs/heads/master$", "^refs/heads/custom/main$"],
   "versionHeightOffset": -1,
+  "nugetPackageVersion": {
+    "semVer": 2
+  },
   "cloudBuild": {
     "setVersionVariables": false
   }

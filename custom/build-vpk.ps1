@@ -41,13 +41,12 @@ function Invoke-Native {
 }
 
 # Vendor files that Directory.Build.targets packs when PackRustAssets=true.
-$vendorFiles = @(
-    'update.exe', 'setup.exe', 'stub.exe',
-    'update_x64.exe', 'setup_x64.exe', 'stub_x64.exe',
-    'update_arm64.exe', 'setup_arm64.exe', 'stub_arm64.exe',
-    'UpdateMac', 'UpdateNix_x64', 'UpdateNix_arm64', 'UpdateNix_arm',
-    'velopack_wix_x86.dll', 'velopack_wix_x64.dll', 'velopack_wix_arm64.dll'
-)
+# The list is read from the targets file of this checkout, so it always matches the base version
+# (e.g. a newer base may add more updaters than an older one).
+$targetsText = Get-Content (Join-Path $repoRoot 'src/Directory.Build.targets') -Raw
+$vendorFiles = @([regex]::Matches($targetsText, '\\target\\release\\([^"\\]+)"') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
+if ($vendorFiles.Count -eq 0) { throw 'Could not read the vendor file list from src/Directory.Build.targets' }
+Write-Host "Vendor files expected by the pack step: $($vendorFiles -join ', ')"
 
 # Expected version: version.json (3-part version, prerelease tag = custom.N).
 $versionJson = Get-Content (Join-Path $repoRoot 'version.json') -Raw | ConvertFrom-Json
