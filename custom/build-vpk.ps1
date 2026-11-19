@@ -134,10 +134,15 @@ try {
     Invoke-Native dotnet @('tool', 'install', '--tool-path', $smokeDir, 'vpk', '--version', $expectedVersion, '--add-source', $builtDir)
     $vpkExe = Join-Path $smokeDir ($IsWindows ? 'vpk.exe' : 'vpk')
     $help = (& $vpkExe pack --help 2>&1 | Out-String)
-    foreach ($opt in '--msiUpgradeCode', '--msiFragment') {
+    foreach ($opt in '--msiUpgradeCode', '--msiFragment', '--msiCompression') {
         if ($help -notmatch [regex]::Escape($opt)) { throw "Installed tool does not list $opt in 'pack --help'" }
     }
-    Write-Host 'Smoke test passed (--msiUpgradeCode and --msiFragment present).'
+    if ($LASTEXITCODE -ne 0) { throw "Installed tool 'pack --help' failed" }
+    $reportedVersion = (& $vpkExe --version 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or ($reportedVersion -split '\+')[0] -ne $expectedVersion) {
+        throw "Installed tool version '$reportedVersion' does not match '$expectedVersion'"
+    }
+    Write-Host "Smoke test passed (custom MSI options present; version $reportedVersion)."
 
     # 6. Output.
     New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
@@ -149,5 +154,11 @@ try {
     Write-Host "SHA256:  $hash"
 }
 finally {
-    Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+    $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $resolvedWork = [IO.Path]::GetFullPath($work)
+    if ((Split-Path -Parent $resolvedWork) -ne $tempRoot -or
+        (Split-Path -Leaf $resolvedWork) -notmatch '^custom-vpk-[0-9a-f]{32}$') {
+        throw "Refusing to remove unexpected temporary path '$resolvedWork'"
+    }
+    Remove-Item -LiteralPath $resolvedWork -Recurse -Force -ErrorAction SilentlyContinue
 }

@@ -27,6 +27,7 @@ This repository is a public fork of [velopack/velopack](https://github.com/velop
 - Current feature branches:
   - `feat/msi-upgrade-code`: option to set the MSI UpgradeCode explicitly instead of deriving it from the pack id.
   - `feat/msi-per-machine-strict`: option for a per-machine-only MSI: launch condition requiring an elevated per-machine install (no `ALLUSERS`/`MSIINSTALLPERUSER` override), fixed install folder under Program Files (no `VELOPACK_INSTALLDIR`, no public directory property).
+  - `feat/msi-media-template`: opt-in MSI cabinet compression and automatic embedded cabinet splitting (`--msiCompression`).
   - `feat/msi-fragment`: option to include an additional WiX fragment file in the generated MSI.
 
 ## Releases

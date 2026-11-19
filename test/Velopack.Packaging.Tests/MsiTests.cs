@@ -146,7 +146,7 @@ public class MsiTests
 
     private static async Task PackTestAppWithMsi(string id, string version, string testString,
         string releaseDir, ILogger logger, InstallLocation instLocation, string packTitle = null,
-        string[] fragments = null, string msiCompression = null)
+        string[] fragments = null, string msiCompression = null, string msiUpgradeCode = null)
     {
         using var _ = TempUtil.GetTempDirectory(out var workDir);
 
@@ -166,6 +166,7 @@ public class MsiTests
                 MsiFragments = fragments,
 
                 MsiCompression = msiCompression,
+                MsiUpgradeCode = msiUpgradeCode,
                 InstLocation = instLocation,
             };
 
@@ -181,8 +182,10 @@ public class MsiTests
         return (true, key.GetValue("DisplayVersion") as string);
     }
 
-    [Fact]
-    public async Task TestMsiFragmentsLinkIntoDefaultFeature()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("high")]
+    public async Task TestMsiFragmentsLinkIntoDefaultFeature(string compression)
     {
         Assert.SkipUnless(VelopackRuntimeInfo.IsWindows, "Windows only");
         using var logger = _output.BuildLoggerFor<MsiTests>();
@@ -201,10 +204,14 @@ public class MsiTests
             </Wix>
             """);
         await PackTestAppWithMsi("MsiFragmentTest", "1.0.0", "fragment test", directory,
-            logger, InstallLocation.PerUser, fragments: [fragment]);
+            logger, InstallLocation.PerUser, fragments: [fragment], msiCompression: compression,
+            msiUpgradeCode: "{2E6E0D0B-7F0E-4E0A-9C1B-5A4D2E7B1C11}");
         using var db = new Database(Path.Combine(directory, "MsiFragmentTest-win.msi"), DatabaseOpenMode.ReadOnly);
         var features = db.ExecuteStringQuery("SELECT `Feature` FROM `Feature`");
         Assert.Single(features);
+        Assert.Equal("{2E6E0D0B-7F0E-4E0A-9C1B-5A4D2E7B1C11}",
+            db.ExecuteScalar("SELECT `Value` FROM `Property` WHERE `Property` = 'UpgradeCode'"));
+        Assert.All(db.ExecuteStringQuery("SELECT `Cabinet` FROM `Media`"), cabinet => Assert.StartsWith("#", cabinet));
         var linked = db.ExecuteStringQuery("SELECT `Feature_` FROM `FeatureComponents` WHERE `Component_` = 'FragmentRegistry'");
         Assert.Equal(features, linked);
         Assert.True(db.ExecuteStringQuery("SELECT `Component_` FROM `FeatureComponents`").Count > 1);
