@@ -43,6 +43,8 @@ public class WindowsPackCommand : PackCommand
 
     public string[] MsiFragments { get; private set; } = [];
 
+    public string MsiCompression { get; private set; }
+
     public bool BuildMsi { get; private set; }
 
     public string MsiVersionOverride { get; private set; }
@@ -113,6 +115,10 @@ public class WindowsPackCommand : PackCommand
             AddOption<string[]>(v => MsiFragments = v, ["--msiFragment"])
                 .SetDescription("Additional WiX source; repeatable. Requires --msi and a VelopackMsiComponents component group.")
                 .SetArgumentHelpName("FILE");
+
+            AddOption<string>(v => MsiCompression = v, ["--msiCompression"])
+                .SetDescription("MSI cabinet compression: none, low, medium, high, mszip. Enables cabinet splitting; requires --msi.")
+                .SetArgumentHelpName("LEVEL");
 
             AddOption<string>(v => MsiVersionOverride = v, ["--msiVersion"])
                 .SetDescription("Override the product version for the generated msi.")

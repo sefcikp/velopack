@@ -57,6 +57,8 @@
     <PackTask
       BuildMsi="$(VelopackBuildMsi)"
       MsiFragments="@(VelopackMsiFragment->'%(FullPath)')"
+
+      MsiCompression="$(VelopackMsiCompression)"
       SelfContained="$(SelfContained)"
       TargetFramework="$(TargetFramework)"
       TargetRuntime="$(VelopackTargetRuntime)"

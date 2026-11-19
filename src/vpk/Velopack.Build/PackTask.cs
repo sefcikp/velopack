@@ -110,6 +110,8 @@ public class PackTask : MSBuildAsyncTask
 
     public string[] MsiFragments { get; set; } = [];
 
+    public string? MsiCompression { get; set; }
+
     public bool BuildMsi { get; set; }
 
     public string? MsiVersionOverride { get; set; }

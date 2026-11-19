@@ -13,7 +13,7 @@
              {{/if}}
              UpgradeCode="{{UpgradeCodeGuid}}">
 
-        <Media Id="1" Cabinet="app.cab" EmbedCab="yes"/>
+        {{#if MsiCompression}}<MediaTemplate EmbedCab="yes" CompressionLevel="{{MsiCompression}}" />{{else}}<Media Id="1" Cabinet="app.cab" EmbedCab="yes"/>{{/if}}
 
         <!-- Authored explicitly (rather than relying on WiX's implicit default) because the upgrade-aware
              cleanup depends on RemoveExistingProducts running right after InstallValidate, before any

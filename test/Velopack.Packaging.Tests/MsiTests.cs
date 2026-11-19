@@ -145,7 +145,8 @@ public class MsiTests
     }
 
     private static async Task PackTestAppWithMsi(string id, string version, string testString,
-        string releaseDir, ILogger logger, InstallLocation instLocation, string packTitle = null, string[] fragments = null)
+        string releaseDir, ILogger logger, InstallLocation instLocation, string packTitle = null,
+        string[] fragments = null, string msiCompression = null)
     {
         using var _ = TempUtil.GetTempDirectory(out var workDir);
 
@@ -163,6 +164,8 @@ public class MsiTests
                 PackDirectory = publishDir,
                 BuildMsi = true,
                 MsiFragments = fragments,
+
+                MsiCompression = msiCompression,
                 InstLocation = instLocation,
             };
 
@@ -727,8 +730,10 @@ public class MsiTests
         Assert.DoesNotContain(fileNames, n => n.EndsWith("_ExecutionStub.exe"));
     }
 
-    [Fact]
-    public async Task TestMsiPerUserInstallAndUpdate()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("high")]
+    public async Task TestMsiPerUserInstallAndUpdate(string compression)
     {
         Assert.SkipUnless(VelopackRuntimeInfo.IsWindows, "Windows only");
         using var logger = _output.BuildLoggerFor<MsiTests>();
@@ -750,7 +755,7 @@ public class MsiTests
                 IoUtil.DeleteFileOrDirectoryHard(hookTempDir);
 
             // pack v1
-            await PackTestAppWithMsi(id, "1.0.0", "version 1 test", releaseDir, logger, InstallLocation.PerUser);
+            await PackTestAppWithMsi(id, "1.0.0", "version 1 test", releaseDir, logger, InstallLocation.PerUser, msiCompression: compression);
             Assert.True(File.Exists(msiPath), $"MSI not found at {msiPath}");
 
             // save a copy before packing v2 overwrites msiPath
@@ -793,7 +798,7 @@ public class MsiTests
             Assert.EndsWith(Environment.NewLine + "no updates", chk1check);
 
             // pack v2
-            await PackTestAppWithMsi(id, "2.0.0", "version 2 test", releaseDir, logger, InstallLocation.PerUser);
+            await PackTestAppWithMsi(id, "2.0.0", "version 2 test", releaseDir, logger, InstallLocation.PerUser, msiCompression: compression);
 
             // check for updates
             var chk2check = WindowsTestHelper.RunCoveredDotnet(appPath, ["check", releaseDir], installDir, logger);

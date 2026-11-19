@@ -153,6 +153,8 @@ public static class MsiBuilder
         
         return new MsiTemplateData() {
             MsiFragments = (options.MsiFragments ?? []).Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+
+            MsiCompression = options.MsiCompression?.ToLowerInvariant(),
             WixId = wixId,
             AppId = options.PackId,
             AppPublisher = options.PackAuthors ?? options.PackId,

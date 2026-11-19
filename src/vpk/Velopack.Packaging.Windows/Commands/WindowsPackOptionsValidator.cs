@@ -23,6 +23,12 @@ public sealed class WindowsPackOptionsValidator : PackOptionsValidator<WindowsPa
             .Must(File.Exists).WithMessage("MSI fragment '{PropertyValue}' must be an existing file.")
             .Must(path => string.Equals(Path.GetExtension(path), ".wxs", StringComparison.OrdinalIgnoreCase))
             .WithMessage("MSI fragment '{PropertyValue}' must have a .wxs extension.");
+
+        RuleFor(x => x.MsiCompression)
+            .Must(v => v == null || new[] { "none", "low", "medium", "high", "mszip" }.Contains(v, StringComparer.OrdinalIgnoreCase))
+            .WithMessage("MSI compression must be one of: none, low, medium, high, mszip.")
+            .Must((options, value) => value == null || (options.BuildMsi && !options.NoInst))
+            .WithMessage("MSI compression requires --msi and cannot be combined with --noInst.");
         RuleFor(x => x.MsiVersionOverride).MustBeValidMsiVersion();
         RuleFor(x => x.MsiUpgradeCode)
             .Must(v => v == null || Guid.TryParseExact(v, "D", out _) || Guid.TryParseExact(v, "B", out _))
