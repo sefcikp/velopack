@@ -13,6 +13,8 @@ namespace Velopack.Build;
     EnabledConversions = MappingConversionType.None)]
 public static partial class TaskOptionsMapper
 {
+    private static string?[] MapFragments(string[] paths) => paths;
+
     public static partial WindowsPackOptions ToWinPackOptions(this PackTask cmd);
     public static partial LinuxPackOptions ToLinuxPackOptions(this PackTask cmd);
     public static partial OsxPackOptions ToOsxPackOptions(this PackTask cmd);

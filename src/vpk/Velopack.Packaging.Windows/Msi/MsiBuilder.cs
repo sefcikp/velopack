@@ -152,6 +152,7 @@ public static class MsiBuilder
         var upgradeCode = options.MsiUpgradeCode;
         
         return new MsiTemplateData() {
+            MsiFragments = (options.MsiFragments ?? []).Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             WixId = wixId,
             AppId = options.PackId,
             AppPublisher = options.PackAuthors ?? options.PackId,
@@ -217,7 +218,7 @@ public static class MsiBuilder
 
         Log.Info("Compiling WiX Template");
 
-        var allSources = $"\"{wxsPath}\" {string.Join(" ", dialogPaths.Select(p => $"\"{p}\""))}";
+        var allSources = $"\"{wxsPath}\" {string.Join(" ", (dialogPaths.Concat(data.MsiFragments ?? [])).Select(p => $"\"{p}\""))}";
         var buildCommand =
             $"\"{HelperFile.WixPath}\" build -arch {wixArch} -outputType Package " +
             $"-pdbType none -out \"{outputFilePath}\" {allSources}";

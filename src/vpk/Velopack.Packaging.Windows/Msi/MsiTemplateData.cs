@@ -2,6 +2,9 @@
 
 public class MsiTemplateData
 {
+    public string[] MsiFragments = [];
+    public bool HasMsiFragments => MsiFragments is { Length: > 0 };
+
     public string WixId;
     public string SourceDirectoryPath;
     public string RustNativeModulePath;

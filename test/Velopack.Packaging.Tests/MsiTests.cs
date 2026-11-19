@@ -145,7 +145,7 @@ public class MsiTests
     }
 
     private static async Task PackTestAppWithMsi(string id, string version, string testString,
-        string releaseDir, ILogger logger, InstallLocation instLocation, string packTitle = null)
+        string releaseDir, ILogger logger, InstallLocation instLocation, string packTitle = null, string[] fragments = null)
     {
         using var _ = TempUtil.GetTempDirectory(out var workDir);
 
@@ -162,6 +162,7 @@ public class MsiTests
                 TargetRuntime = RID.Parse("win-x64"),
                 PackDirectory = publishDir,
                 BuildMsi = true,
+                MsiFragments = fragments,
                 InstLocation = instLocation,
             };
 
@@ -175,6 +176,35 @@ public class MsiTests
         using var key = root.OpenSubKey($@"Software\Microsoft\Windows\CurrentVersion\Uninstall\MSI:{appId}");
         if (key == null) return (false, null);
         return (true, key.GetValue("DisplayVersion") as string);
+    }
+
+    [Fact]
+    public async Task TestMsiFragmentsLinkIntoDefaultFeature()
+    {
+        Assert.SkipUnless(VelopackRuntimeInfo.IsWindows, "Windows only");
+        using var logger = _output.BuildLoggerFor<MsiTests>();
+        using var temp = TempUtil.GetTempDirectory(out var directory);
+        var fragment = Path.Combine(directory, "extra components.wxs");
+        File.WriteAllText(fragment, """
+            <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+              <Fragment>
+                <ComponentGroup Id="VelopackMsiComponents">
+                  <Component Id="FragmentRegistry" Directory="INSTALLFOLDER" Guid="*">
+                    <RegistryValue Root="HKCU" Key="Software\Example.FragmentTest"
+                      Name="Installed" Type="integer" Value="1" KeyPath="yes"/>
+                  </Component>
+                </ComponentGroup>
+              </Fragment>
+            </Wix>
+            """);
+        await PackTestAppWithMsi("MsiFragmentTest", "1.0.0", "fragment test", directory,
+            logger, InstallLocation.PerUser, fragments: [fragment]);
+        using var db = new Database(Path.Combine(directory, "MsiFragmentTest-win.msi"), DatabaseOpenMode.ReadOnly);
+        var features = db.ExecuteStringQuery("SELECT `Feature` FROM `Feature`");
+        Assert.Single(features);
+        var linked = db.ExecuteStringQuery("SELECT `Feature_` FROM `FeatureComponents` WHERE `Component_` = 'FragmentRegistry'");
+        Assert.Equal(features, linked);
+        Assert.True(db.ExecuteStringQuery("SELECT `Component_` FROM `FeatureComponents`").Count > 1);
     }
 
     [Theory]
