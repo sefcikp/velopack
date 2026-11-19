@@ -3,7 +3,8 @@
   "version": "1.3.39-custom.2",
   "gitCommitIdShortFixedLength": 7,
   "publicReleaseRefSpec": ["^refs/heads/master$", "^refs/heads/custom/main$"],
-  "versionHeightOffset": -1,
+  "versionHeightOffset": 0,
+  "pathFilters": [":!**"],
   "nugetPackageVersion": {
     "semVer": 2
   },
