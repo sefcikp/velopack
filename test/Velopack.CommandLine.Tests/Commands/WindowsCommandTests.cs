@@ -22,6 +22,45 @@ public abstract class ReleaseCommandTests<T> : BaseCommandTests<T>
     protected static FluentValidation.Results.ValidationResult Validate(WindowsPackOptions options)
         => new WindowsPackOptionsValidator().Validate(options);
 
+    [WindowsOnlyTheory]
+    [InlineData("none")]
+    [InlineData("low")]
+    [InlineData("medium")]
+    [InlineData("high")]
+    [InlineData("mszip")]
+    [InlineData("HIGH")]
+    public void MsiCompression_MapsAndValidates(string level)
+    {
+        var options = ParseAndMap(GetRequiredDefaultOptions() + $"--msi --msiCompression {level}");
+        Assert.Equal(level, options.MsiCompression);
+        Assert.DoesNotContain(Validate(options).Errors, e => e.PropertyName == "MsiCompression");
+        options.BuildMsi = false;
+        Assert.Contains(Validate(options).Errors, e => e.PropertyName == "MsiCompression");
+        options.BuildMsi = true;
+        options.NoInst = true;
+        Assert.Contains(Validate(options).Errors, e => e.PropertyName == "MsiCompression");
+    }
+
+    [WindowsOnlyTheory]
+    [InlineData("invalid")]
+    [InlineData("")]
+    [InlineData(" high ")]
+    public void MsiCompression_InvalidValue_ListsAllowedLevels(string level)
+    {
+        var options = ParseAndMap(GetRequiredDefaultOptions() + "--msi");
+        options.MsiCompression = level;
+        Assert.Contains(Validate(options).Errors, e => e.PropertyName == "MsiCompression"
+            && e.ErrorMessage.Contains("none, low, medium, high, mszip"));
+    }
+
+    [WindowsOnlyFact]
+    public void MsiCompression_Unset_IsOptional()
+    {
+        var options = ParseAndMap(GetRequiredDefaultOptions());
+        Assert.Null(options.MsiCompression);
+        Assert.DoesNotContain(Validate(options).Errors, e => e.PropertyName == "MsiCompression");
+    }
+
     [Fact]
     public void NoDelta_BareOption_SetsFlag()
     {

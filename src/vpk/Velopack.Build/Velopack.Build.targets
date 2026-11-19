@@ -54,6 +54,8 @@
            Text="Only SelfContained=true releases are supported on Linux. Please dotnet publish with the --self-contained option." />
 
     <PackTask
+      BuildMsi="$(VelopackBuildMsi)"
+      MsiCompression="$(VelopackMsiCompression)"
       SelfContained="$(SelfContained)"
       TargetFramework="$(TargetFramework)"
       TargetRuntime="$(VelopackTargetRuntime)"

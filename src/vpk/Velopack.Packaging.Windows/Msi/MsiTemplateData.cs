@@ -2,6 +2,7 @@
 
 public class MsiTemplateData
 {
+    public string MsiCompression;
     public string WixId;
     public string SourceDirectoryPath;
     public string RustNativeModulePath;

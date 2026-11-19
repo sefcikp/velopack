@@ -151,6 +151,7 @@ public static class MsiBuilder
         }
         
         return new MsiTemplateData() {
+            MsiCompression = options.MsiCompression?.ToLowerInvariant(),
             WixId = wixId,
             AppId = options.PackId,
             AppPublisher = options.PackAuthors ?? options.PackId,

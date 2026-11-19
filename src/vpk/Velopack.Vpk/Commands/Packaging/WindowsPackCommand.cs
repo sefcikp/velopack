@@ -41,6 +41,8 @@ public class WindowsPackCommand : PackCommand
     public string MsiDialogBackground { get; private set; }
 
 
+    public string MsiCompression { get; private set; }
+
     public bool BuildMsi { get; private set; }
 
     public string MsiVersionOverride { get; private set; }
@@ -105,6 +107,10 @@ public class WindowsPackCommand : PackCommand
 
             AddOption<bool>((v) => BuildMsi = v, ["--msi"])
                 .SetDescription("Compile a .msi machine-wide bootstrap package.");
+
+            AddOption<string>(v => MsiCompression = v, ["--msiCompression"])
+                .SetDescription("MSI cabinet compression: none, low, medium, high, mszip. Enables cabinet splitting; requires --msi.")
+                .SetArgumentHelpName("LEVEL");
 
             AddOption<string>(v => MsiVersionOverride = v, ["--msiVersion"])
                 .SetDescription("Override the product version for the generated msi.")

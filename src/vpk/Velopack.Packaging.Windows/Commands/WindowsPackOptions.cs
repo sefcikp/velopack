@@ -41,6 +41,9 @@ public class WindowsPackOptions : WindowsReleasifyOptions, INugetPackCommand, IP
     public string MsiTopBanner { get; set; }
     public string MsiDialogBackground { get; set; }
 
+    /// <summary>Optional WiX cabinet compression level; enables automatic cabinet splitting.</summary>
+    public string MsiCompression { get; set; }
+
     public bool BuildMsi { get; set; }
 
     public string MsiVersionOverride { get; set; }

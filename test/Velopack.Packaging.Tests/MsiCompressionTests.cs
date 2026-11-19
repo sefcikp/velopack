@@ -1,0 +1,523 @@
+using HandlebarsDotNet;
+using Velopack.Packaging.Windows.Commands;
+using Velopack.TestCommon;
+using Velopack.Util;
+using WixToolset.Dtf.WindowsInstaller;
+using Velopack.Packaging.Windows.Msi;
+
+namespace Velopack.Packaging.Tests;
+
+public class MsiCompressionTests
+{
+    private readonly ITestOutputHelper _output;
+
+    public MsiCompressionTests(ITestOutputHelper output) => _output = output;
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    [Theory]
+    [InlineData("none")]
+    [InlineData("low")]
+    [InlineData("medium")]
+    [InlineData("HIGH")]
+    [InlineData("mszip")]
+    public async Task CompressedMsi_ContainsEmbeddedCabinetsAndAllPayloadFiles(string compression)
+    {
+        Assert.SkipUnless(VelopackRuntimeInfo.IsWindows, "Windows only");
+        using var logger = _output.BuildLoggerFor<MsiCompressionTests>();
+        using var input = TempUtil.GetTempDirectory(out var source);
+        using var output = TempUtil.GetTempDirectory(out var releases);
+        PathHelper.CopyRustAssetTo("testapp.exe", source);
+        Directory.CreateDirectory(Path.Combine(source, "nested"));
+        File.WriteAllText(Path.Combine(source, "nested", "payload.txt"), "compression test");
+        var options = new WindowsPackOptions {
+            EntryExecutableName = "testapp.exe",
+            PackId = "Example.Compression",
+            PackVersion = "1.0.0",
+            PackDirectory = source,
+            ReleaseDir = new DirectoryInfo(releases),
+            TargetRuntime = RID.Parse("win-x64"),
+            BuildMsi = true,
+            MsiCompression = compression,
+        };
+        var data = MsiBuilder.ConvertOptionsToTemplateData(new DirectoryInfo(source), 0, null, options);
+        Assert.Equal(compression.ToLowerInvariant(), data.MsiCompression);
+        await WindowsTestHelper.GetPackRunner(logger).Run(options);
+        using var db = new Database(Path.Combine(releases, "Example.Compression-win.msi"), DatabaseOpenMode.ReadOnly);
+        var cabinets = db.ExecuteStringQuery("SELECT `Cabinet` FROM `Media`");
+        Assert.NotEmpty(cabinets);
+        Assert.All(cabinets, cabinet => Assert.StartsWith("#", cabinet));
+        var files = db.ExecuteStringQuery("SELECT `FileName` FROM `File`");
+        foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories)) {
+            Assert.Contains(files, name => name.Split('|').Last() == Path.GetFileName(file));
+        }
+    }
+
+    [Fact]
+    public void DefaultTemplate_IsUnchanged()
+    {
+        var data = new MsiTemplateData { AppTitle = "Example", AppPublisher = "Example", MainExeFileName = "app.exe" };
+        var original = """
+            <!--suppress CheckEmptyScriptTag -->
+            <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+                <Package Name="{{AppTitle}}"
+                         Manufacturer="{{AppPublisher}}"
+                         Version="{{AppMsiVersion}}"
+                         Language="1033"
+                         {{#if InstallLocationCurrentUserOnly}}
+                         Scope="perUser"
+                         {{else if InstallLocationAllUsersOnly}}
+                         Scope="perMachine"
+                         {{else}}
+                         Scope="perUserOrMachine"
+                         {{/if}}
+                         UpgradeCode="{{UpgradeCodeGuid}}">
+            
+                    <Media Id="1" Cabinet="app.cab" EmbedCab="yes"/>
+            
+                    <!-- Authored explicitly (rather than relying on WiX's implicit default) because the upgrade-aware
+                         cleanup depends on RemoveExistingProducts running right after InstallValidate, before any
+                         new files are laid down. Same-version upgrades are allowed because the msi version drops the
+                         semver prerelease (2.0.0-beta.1 and 2.0.0 are both 2.0.0.0), which would otherwise install
+                         side by side. The downgrade message is localized by RustSetLocaleStrings. -->
+                    <MajorUpgrade Schedule="afterInstallValidate" AllowSameVersionUpgrades="yes"
+                                  DowngradeErrorMessage="[MsiDowngradeError]"/>
+            
+                    <StandardDirectory Id="TARGETDIR">
+                        <Directory Id="INSTALLFOLDER" Name="{{AppTitleSanitized}}" ComponentGuidGenerationSeed="{{ComponentGenerationSeedGuid}}">
+                            {{!-- CURRENTFOLDER only names current\ for the --noStub shortcut WorkingDirectory. The harvested
+                                 files keep their own auto-id "current" row, so file component GUIDs match stub-mode msis;
+                                 do not move the harvest under it. --}}
+                            <Directory {{#if NoStub}}Id="CURRENTFOLDER" {{/if}}Name="current"/>
+                            <Directory Id="PACKAGES_DIR" Name="packages"/>
+                        </Directory>
+                    </StandardDirectory>
+            
+                    {{#if DesktopShortcut}}
+                        <StandardDirectory Id="DesktopFolder">
+                            <Component Id="ApplicationDesktopShortcut">
+                                <Shortcut Id="ApplicationDesktopShortcut" Name="{{AppTitle}}" Description="[MsiDesktopShortcutDescription]"
+                                          Target="[INSTALLFOLDER]{{LaunchFileNameEscaped}}" WorkingDirectory="{{LaunchWorkingDirectoryId}}"/>
+                                <RemoveFolder Id="CleanUpDesktopShortcut" Directory="INSTALLFOLDER" On="uninstall"/>
+                                <RegistryValue Root="HKMU" Key="Software&#92;{{AppPublisherSanitizedEscaped}}&#92;{{AppId}}.DesktopShortcut"
+                                               Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+                            </Component>
+                        </StandardDirectory>
+                    {{/if}}
+            
+                    {{#if StartMenuShortcut}}
+                        <!-- Shortcut is placed in Start > Programs > AppPublisher -->
+                        <StandardDirectory Id="ProgramMenuFolder">
+                            <Directory Id="AppPublisherProgramMenuDir" Name="{{AppPublisherSanitized}}"/>
+                        </StandardDirectory>
+                        <DirectoryRef Id="AppPublisherProgramMenuDir">
+                            <Component Id="ApplicationStartMenuShortcut">
+                                <Shortcut
+                                        Id="ApplicationStartMenuShortcut"
+                                        Name="{{AppTitle}}"
+                                        Description="[MsiStartMenuShortcutDescription]"
+                                        Target="[INSTALLFOLDER]{{LaunchFileNameEscaped}}"
+                                        WorkingDirectory="{{LaunchWorkingDirectoryId}}"/>
+                                <RemoveFolder Id="CleanUpStartMenuShortcut" Directory="AppPublisherProgramMenuDir" On="uninstall"/>
+                                <RegistryValue Root="HKMU" Key="Software&#92;{{AppPublisherSanitizedEscaped}}&#92;{{AppId}}.StartMenuShortcut"
+                                               Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+                            </Component>
+                        </DirectoryRef>
+                    {{/if}}
+            
+                    {{#if StartMenuRootShortcut}}
+                        <!-- Shortcut is placed directly in Start > Programs -->
+                        <StandardDirectory Id="ProgramMenuFolder">
+                            <Component Id="ApplicationStartMenuRootShortcut">
+                                <Shortcut
+                                        Id="ApplicationStartMenuRootShortcut"
+                                        Name="{{AppTitle}}"
+                                        Description="[MsiStartMenuShortcutDescription]"
+                                        Target="[INSTALLFOLDER]{{LaunchFileNameEscaped}}"
+                                        WorkingDirectory="{{LaunchWorkingDirectoryId}}"/>
+                                <RegistryValue Root="HKMU" Key="Software&#92;{{AppPublisherSanitizedEscaped}}&#92;{{AppId}}.StartMenuRootShortcut"
+                                               Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+                            </Component>
+                        </StandardDirectory>
+                    {{/if}}
+            
+                    {{#if StartupShortcut}}
+                        <StandardDirectory Id="StartupFolder">
+                            <Component Id="ApplicationStartupShortcut">
+                                <Shortcut Id="ApplicationStartupShortcut" Name="{{AppTitle}}"
+                                          Description="Startup shortcut for {{AppTitleEscaped}}"
+                                          Target="[INSTALLFOLDER]{{LaunchFileNameEscaped}}"
+                                          WorkingDirectory="{{LaunchWorkingDirectoryId}}"/>
+                                <RegistryValue Root="HKMU" Key="Software&#92;{{AppPublisherSanitizedEscaped}}&#92;{{AppId}}.StartupShortcut"
+                                               Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+                            </Component>
+                        </StandardDirectory>
+                    {{/if}}
+            
+                    {{#if HasIcon}}
+                        <Icon Id="appicon" SourceFile="{{IconPath}}"/>
+                    {{/if}}
+            
+                    <!-- Suppress MSI's default ARP entry (always goes to HKLM regardless of per-user context)
+                         and write our own using HKMU (resolves to HKCU for per-user, HKLM for per-machine) -->
+                    <Property Id="ARPSYSTEMCOMPONENT" Value="1"/>
+                    <DirectoryRef Id="INSTALLFOLDER">
+                        <Component Id="ArpRegistration">
+                            <RegistryKey Root="HKMU" Key="Software&#92;Microsoft&#92;Windows&#92;CurrentVersion&#92;Uninstall&#92;MSI:{{AppId}}">
+                                <RegistryValue Name="DisplayName" Value="{{AppTitleEscaped}}" Type="string"/>
+                                <RegistryValue Name="DisplayVersion" Value="{{AppVersion}}" Type="string"/>
+                                <RegistryValue Name="DisplayIcon" Value="[INSTALLFOLDER]{{LaunchFileNameEscaped}}" Type="string"/>
+                                <RegistryValue Name="Publisher" Value="{{AppPublisherEscaped}}" Type="string"/>
+                                <RegistryValue Name="UninstallString" Value="msiexec.exe /x [ProductCode]" Type="string"/>
+                                <RegistryValue Name="QuietUninstallString" Value="msiexec.exe /x [ProductCode] /qn" Type="string"/>
+                                <RegistryValue Name="InstallLocation" Value="[INSTALLFOLDER]" Type="string"/>
+                                <RegistryValue Name="NoModify" Value="1" Type="integer"/>
+                                <RegistryValue Name="NoRepair" Value="1" Type="integer" KeyPath="yes"/>
+                            </RegistryKey>
+                        </Component>
+                    </DirectoryRef>
+            
+                    {{#if HasLicense}}
+                        <WixVariable Id="WixUILicenseRtf" Value="{{LicenseRtfFilePath}}"/>
+                    {{/if}}
+            
+                    {{#if HasWelcomeMessage}}
+                        <Property Id="MsiWelcomeDescription" Value="{{{WelcomeMessage}}}"/>
+                    {{/if}}
+            
+                    {{#if HasReadme}}
+                        <WixVariable Id="WixUIReadmeRtf" Value="{{ReadmeRtfFilePath}}"/>
+                    {{/if}}
+            
+                    {{#if HasConclusionMessage}}
+                        <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="{{{ConclusionMessage}}}"/>
+                    {{/if}}
+            
+                    <!-- Default checked state of launch app check box to true -->
+                    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1"/>
+            
+                    <!-- WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT is set at runtime by RustSetLocaleStrings -->
+            
+                    {{#if InstallLocationCurrentUserOnly}}
+                    <Property Id="WixAppFolder" Value="WixPerUserFolder"/>
+                    {{else}}
+                    <Property Id="WixAppFolder" Value="WixPerMachineFolder"/>
+                    {{/if}}
+                    <Property Id="ApplicationFolderName" Value="{{AppId}}"/>
+                    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER"/>
+            
+                    <!-- Optional install-dir override for sysadmins, e.g. msiexec /i app.msi VELOPACK_INSTALLDIR="D:\App".
+                         When set, the forced default path (LocalAppData/ProgramFiles) is skipped in both UI and silent
+                         installs. Secure so it survives the UI -> execute sequence handoff for elevated per-machine installs.
+                         Only applied on first install: on maintenance/uninstall INSTALLFOLDER must resolve from the
+                         registered component paths, so the property cannot redirect what the elevated cleanup deletes. -->
+                    <Property Id="VELOPACK_INSTALLDIR" Secure="yes"/>
+                    <SetProperty Id="INSTALLFOLDER" Value="[VELOPACK_INSTALLDIR]" Before="CostFinalize" Sequence="execute"
+                                 Condition="VELOPACK_INSTALLDIR AND NOT Installed"/>
+            
+                    <!-- Quiet/passive/reduced installs (UILevel < 5) never run the UI publishes that set the
+                         default INSTALLFOLDER, which would otherwise resolve to {ROOTDRIVE}\{AppTitle}. Apply
+                         the same defaults here: the forced location for single-scope packages; per-user for
+                         dual-scope packages unless installing per-machine (ALLUSERS=1). -->
+                    {{#if InstallLocationCurrentUserOnly}}
+                        <SetProperty Action="SetQuietDefaultInstallFolder" Id="INSTALLFOLDER"
+                                     Value="[LocalAppDataFolder][ApplicationFolderName]" Before="CostFinalize" Sequence="execute"
+                                     Condition="NOT Installed AND NOT VELOPACK_INSTALLDIR AND UILevel&lt;5"/>
+                    {{else if InstallLocationAllUsersOnly}}
+                        <SetProperty Action="SetQuietDefaultInstallFolder" Id="INSTALLFOLDER"
+                                     Value="{{ProgramFilesFolderName}}[ApplicationFolderName]" Before="CostFinalize" Sequence="execute"
+                                     Condition="NOT Installed AND NOT VELOPACK_INSTALLDIR AND UILevel&lt;5"/>
+                    {{else}}
+                        <SetProperty Action="SetQuietDefaultInstallFolderPerUser" Id="INSTALLFOLDER"
+                                     Value="[LocalAppDataFolder][ApplicationFolderName]" Before="CostFinalize" Sequence="execute"
+                                     Condition="NOT Installed AND NOT VELOPACK_INSTALLDIR AND UILevel&lt;5 AND NOT ALLUSERS=1"/>
+                        <SetProperty Action="SetQuietDefaultInstallFolderPerMachine" Id="INSTALLFOLDER"
+                                     Value="{{ProgramFilesFolderName}}[ApplicationFolderName]" Before="CostFinalize" Sequence="execute"
+                                     Condition="NOT Installed AND NOT VELOPACK_INSTALLDIR AND UILevel&lt;5 AND ALLUSERS=1"/>
+                    {{/if}}
+            
+                    {{#if InstallLocationEither}}
+                        <WixVariable Id="WixUISupportPerUser" Value="1"/>
+                        <WixVariable Id="WixUISupportPerMachine" Value="1"/>
+                    {{else}}
+                        <WixVariable Id="WixUISupportPerUser" Value="0"/>
+                        <WixVariable Id="WixUISupportPerMachine" Value="0"/>
+                    {{/if}}
+            
+                    <Files Include="{{SourceDirectoryPath}}\**"/>
+            
+                    <!-- Binary resources for UI dialogs -->
+                    <Binary Id="RustDll" SourceFile="{{RustNativeModulePath}}"/>
+                    <Binary Id="WixUI_Bmp_Banner" SourceFile="{{BannerBmpPath}}"/>
+                    <Binary Id="WixUI_Bmp_Dialog" SourceFile="{{DialogBmpPath}}"/>
+                    <Binary Id="WixUI_Ico_Exclam" SourceFile="{{ExclamIcoPath}}"/>
+                    <Binary Id="WixUI_Bmp_Up" SourceFile="{{UpIcoPath}}"/>
+                    <Binary Id="WixUI_Bmp_New" SourceFile="{{NewIcoPath}}"/>
+            
+                    <!-- MSI properties for app metadata (used by Rust custom actions) -->
+                    <!-- Must be the pack ID (not the title): cleanup uses it to locate the %LocalAppData%
+                         fallback dir, the velopack temp dir and the MSI:{AppId} ARP key -->
+                    <Property Id="RustAppId" Value="{{AppId}}"/>
+                    <Property Id="RustAppTitle" Value="{{AppTitle}}"/>
+                    <Property Id="RustAppVersion" Value="{{AppVersion}}"/>
+                    {{#if HasRuntimeDependencies}}
+                        <Property Id="RustRuntimeDependencies" Value="{{RuntimeDependencies}}"/>
+                    {{/if}}
+                    <Property Id="RustStubFileName" Value="{{LaunchFileName}}"/>
+                    <Property Id="RustMainExeFileName" Value="{{MainExeFileName}}"/>
+            
+                    <!-- Custom actions -->
+                    <CustomAction Id="RustSetLocaleStrings" BinaryRef="RustDll" DllEntry="RustSetLocaleStrings" Execute="immediate" Return="check"/>
+                    <CustomAction Id="RustValidatePath" BinaryRef="RustDll" DllEntry="ValidatePath" Execute="immediate" Return="check"/>
+                    <CustomAction Id="RustEarlyBootstrap" BinaryRef="RustDll" DllEntry="EarlyBootstrap" Execute="immediate" Return="check"/>
+                    <!-- On full uninstall RustCleanup removes everything left in the install dir; during a
+                         major upgrade ([UPGRADINGPRODUCTCODE] set in the old product being removed) it only
+                         purges the `current` payload dir and downloaded packages, so user files outside it survive the upgrade.
+                         UserRustCleanup runs impersonated on full uninstall only, to clean per-user state
+                         (shortcuts, %LocalAppData% fallback dir, temp) that the non-impersonated action
+                         cannot resolve when it runs as SYSTEM on per-machine installs. -->
+                    <CustomAction Id="SetRustCleanupData" Property="RustCleanup"
+                                  Value="[INSTALLFOLDER]&quot;[RustAppId]&quot;[TempFolder]&quot;[LocalAppDataFolder]&quot;[UPGRADINGPRODUCTCODE]&quot;[ALLUSERS]"
+                                  Execute="immediate" Return="check"/>
+                    <CustomAction Id="RustCleanup" BinaryRef="RustDll" DllEntry="CleanupDeferred" Execute="deferred" Impersonate="no" Return="ignore"/>
+                    <CustomAction Id="SetUserRustCleanupData" Property="UserRustCleanup"
+                                  Value="[INSTALLFOLDER]&quot;[RustAppId]&quot;[TempFolder]&quot;[LocalAppDataFolder]&quot;&quot;[ALLUSERS]"
+                                  Execute="immediate" Return="check"/>
+                    <CustomAction Id="UserRustCleanup" BinaryRef="RustDll" DllEntry="UserCleanupDeferred" Execute="deferred" Impersonate="yes"
+                                  Return="ignore"/>
+                    <CustomAction Id="RustLaunchApplication" BinaryRef="RustDll" DllEntry="LaunchApplication" Impersonate="yes" Execute="immediate"
+                                  Return="ignore"/>
+            
+                    <!-- Install/uninstall hooks: run app exe with lifecycle flags -->
+                    <CustomAction Id="SetInstallHookData" Property="InstallHookDeferred"
+                                  Value="[INSTALLFOLDER]&quot;[RustMainExeFileName]&quot;[RustAppVersion]" Execute="immediate" Return="check"/>
+                    <CustomAction Id="InstallHookDeferred" BinaryRef="RustDll" DllEntry="InstallHookDeferred" Execute="deferred"
+                                  Impersonate="yes" Return="ignore"/>
+                    <CustomAction Id="SetUpdatedHookData" Property="UpdatedHookDeferred"
+                                  Value="[INSTALLFOLDER]&quot;[RustMainExeFileName]&quot;[RustAppVersion]" Execute="immediate" Return="check"/>
+                    <CustomAction Id="UpdatedHookDeferred" BinaryRef="RustDll" DllEntry="UpdatedHookDeferred" Execute="deferred"
+                                  Impersonate="yes" Return="ignore"/>
+                    <CustomAction Id="SetUninstallHookData" Property="UninstallHookDeferred"
+                                  Value="[INSTALLFOLDER]&quot;[RustMainExeFileName]&quot;[RustAppVersion]" Execute="immediate" Return="check"/>
+                    <CustomAction Id="UninstallHookDeferred" BinaryRef="RustDll" DllEntry="UninstallHookDeferred" Execute="deferred"
+                                  Impersonate="yes" Return="ignore"/>
+            
+                    <!-- Channel promotion tag: reads the channel override from the MSI's own Authenticode
+                         signature and patches current\sq.version. Runs on install and repair; never fails
+                         the install. -->
+                    <CustomAction Id="SetPatchChannelData" Property="PatchChannelDeferred"
+                                  Value="[OriginalDatabase]&quot;[INSTALLFOLDER]" Execute="immediate" Return="check"/>
+                    <CustomAction Id="PatchChannelDeferred" BinaryRef="RustDll" DllEntry="PatchChannelDeferred"
+                                  Execute="deferred" Impersonate="no" Return="ignore"/>
+            
+                    <InstallUISequence>
+                        <Custom Action="RustSetLocaleStrings" Before="AppSearch"/>
+                        <Custom Action="RustEarlyBootstrap" After="RustSetLocaleStrings" Condition="NOT REMOVE AND RustRuntimeDependencies"/>
+                    </InstallUISequence>
+            
+                    <InstallExecuteSequence>
+                        <!-- Also in the execute sequence so silent installs (no UI sequence) get the localized downgrade
+                             message. Private properties set in the UI sequence do not carry over, so this sets them again.
+                             Only needed for the launch condition on first install; skipped on repair and uninstall so a
+                             failure here can never block removing the app. -->
+                        <Custom Action="RustSetLocaleStrings" Before="AppSearch" Condition="NOT Installed"/>
+                        <Custom Action="SetPatchChannelData" Before="PatchChannelDeferred" Condition="NOT REMOVE"/>
+                        <Custom Action="PatchChannelDeferred" After="InstallFiles" Condition="NOT REMOVE"/>
+                        <!-- The app hooks run after PatchChannelDeferred so they see the corrected channel. When this MSI
+                             is upgrading an older product (WIX_UPGRADE_DETECTED) the app gets the "updated" hook, like an
+                             in-app update, instead of the "install" hook. -->
+                        <Custom Action="SetInstallHookData" Before="InstallHookDeferred" Condition="NOT REMOVE AND NOT WIX_UPGRADE_DETECTED"/>
+                        <Custom Action="InstallHookDeferred" After="PatchChannelDeferred" Condition="NOT REMOVE AND NOT WIX_UPGRADE_DETECTED"/>
+                        <Custom Action="SetUpdatedHookData" Before="UpdatedHookDeferred" Condition="NOT REMOVE AND WIX_UPGRADE_DETECTED"/>
+                        <Custom Action="UpdatedHookDeferred" After="PatchChannelDeferred" Condition="NOT REMOVE AND WIX_UPGRADE_DETECTED"/>
+                        <!-- The app uninstall hook and per-user cleanup only run on a real uninstall, not when
+                             the old product is removed as part of a major upgrade. RustCleanup runs in both
+                             cases; it decides what to remove based on [UPGRADINGPRODUCTCODE]. -->
+                        <Custom Action="SetUninstallHookData" Before="UninstallHookDeferred"
+                                Condition="(REMOVE=&quot;ALL&quot;) AND NOT UPGRADINGPRODUCTCODE"/>
+                        <Custom Action="UninstallHookDeferred" Before="RemoveFiles"
+                                Condition="(REMOVE=&quot;ALL&quot;) AND NOT UPGRADINGPRODUCTCODE"/>
+                        <Custom Action="SetRustCleanupData" Before="RustCleanup" Condition="(REMOVE=&quot;ALL&quot;)"/>
+                        <Custom Action="RustCleanup" After="RemoveFiles" Condition="(REMOVE=&quot;ALL&quot;)"/>
+                        <Custom Action="SetUserRustCleanupData" Before="UserRustCleanup"
+                                Condition="(REMOVE=&quot;ALL&quot;) AND NOT UPGRADINGPRODUCTCODE"/>
+                        <Custom Action="UserRustCleanup" After="RustCleanup"
+                                Condition="(REMOVE=&quot;ALL&quot;) AND NOT UPGRADINGPRODUCTCODE"/>
+                    </InstallExecuteSequence>
+            
+                    <UI>
+                        <TextStyle Id="WixUI_Font_Normal" FaceName="Segoe UI" Size="8"/>
+                        <TextStyle Id="WixUI_Font_Bigger" FaceName="Segoe UI" Size="12"/>
+                        <TextStyle Id="WixUI_Font_Title" FaceName="Segoe UI" Size="9" Bold="yes"/>
+                        <TextStyle Id="WixUI_Font_Emphasized" FaceName="Segoe UI" Size="8" Bold="yes"/>
+            
+                        <Property Id="DefaultUIFont" Value="WixUI_Font_Normal"/>
+            
+                        <DialogRef Id="BrowseDlg"/>
+                        <DialogRef Id="DiskCostDlg"/>
+                        <DialogRef Id="ErrorDlg"/>
+                        <DialogRef Id="FatalError"/>
+                        <DialogRef Id="FilesInUse"/>
+                        <DialogRef Id="MsiRMFilesInUse"/>
+                        <DialogRef Id="PrepareDlg"/>
+                        <DialogRef Id="ProgressDlg"/>
+                        <DialogRef Id="ResumeDlg"/>
+                        <DialogRef Id="UserExit"/>
+                        <DialogRef Id="CancelDlg"/>
+                        {{#if HasReadme}}
+                            <DialogRef Id="ReadmeDlg"/>
+                        {{/if}}
+            
+                        <!-- ValidatePath actions for BrowseDlg and InstallScopeDlg -->
+                        <Publish Dialog="BrowseDlg" Control="OK" Event="DoAction" Value="RustValidatePath" Order="3"
+                                 Condition="NOT WIXUI_DONTVALIDATEPATH"/>
+                        <Publish Dialog="BrowseDlg" Control="OK" Event="SpawnDialog" Value="InvalidDirDlg" Order="4"
+                                 Condition="NOT WIXUI_DONTVALIDATEPATH AND WIXUI_INSTALLDIR_VALID&lt;&gt;&quot;1&quot;"/>
+            
+                        {{#if InstallLocationEither}}
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Event="DoAction" Value="RustValidatePath"
+                                     Order="7" Condition="NOT WIXUI_DONTVALIDATEPATH"/>
+                        {{/if}}
+            
+                        <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999"/>
+                        <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="RustLaunchApplication"
+                                 Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed"/>
+            
+                        {{!-- Welcome -> (Readme | License | InstallScope | VerifyReady) --}}
+                        {{#if HasReadme}}
+                            <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="ReadmeDlg" Condition="NOT Installed"/>
+                        {{else if HasLicense}}
+                            <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg" Condition="NOT Installed"/>
+                        {{else if InstallLocationEither}}
+                            <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallScopeDlg" Condition="NOT Installed"/>
+                        {{else}}
+                            <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Condition="NOT Installed"/>
+                        {{/if}}
+            
+                        <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Condition="Installed AND PATCH"/>
+            
+                        {{#if HasReadme}}
+                            <Publish Dialog="ReadmeDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg"/>
+                            {{#if HasLicense}}
+                                <Publish Dialog="ReadmeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg"/>
+                            {{else if InstallLocationEither}}
+                                <Publish Dialog="ReadmeDlg" Control="Next" Event="NewDialog" Value="InstallScopeDlg"/>
+                            {{else}}
+                                <Publish Dialog="ReadmeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg"/>
+                            {{/if}}
+                        {{/if}}
+            
+                        {{#if HasLicense}}
+                            {{#if HasReadme}}
+                                <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="ReadmeDlg"/>
+                            {{else}}
+                                <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg"/>
+                            {{/if}}
+                            {{#if InstallLocationEither}}
+                                <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="InstallScopeDlg"
+                                         Condition="LicenseAccepted = &quot;1&quot;"/>
+                            {{else}}
+                                <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg"
+                                         Condition="LicenseAccepted = &quot;1&quot;"/>
+                            {{/if}}
+                        {{/if}}
+            
+                        {{#if InstallLocationEither}}
+                            {{#if HasLicense}}
+                                <Publish Dialog="InstallScopeDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg"/>
+                            {{else if HasReadme}}
+                                <Publish Dialog="InstallScopeDlg" Control="Back" Event="NewDialog" Value="ReadmeDlg"/>
+                            {{else}}
+                                <Publish Dialog="InstallScopeDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg"/>
+                            {{/if}}
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Property="WixAppFolder" Value="WixPerUserFolder"
+                                     Order="1" Condition="NOT Privileged"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Property="ALLUSERS" Value="2" Order="2"
+                                     Condition="WixAppFolder = &quot;WixPerUserFolder&quot;"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Property="MSIINSTALLPERUSER" Value="1" Order="2"
+                                     Condition="WixAppFolder = &quot;WixPerUserFolder&quot;"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Property="Privileged" Value="0" Order="2"
+                                     Condition="WixAppFolder = &quot;WixPerUserFolder&quot;"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Property="InstallPrivileges" Value="limited" Order="2"
+                                     Condition="WixAppFolder = &quot;WixPerUserFolder&quot;"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Property="ALLUSERS" Value="1" Order="3"
+                                     Condition="WixAppFolder = &quot;WixPerMachineFolder&quot;"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Property="MSIINSTALLPERUSER" Value="{}" Order="3"
+                                     Condition="WixAppFolder = &quot;WixPerMachineFolder&quot;"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Property="INSTALLFOLDER"
+                                     Value="[LocalAppDataFolder][ApplicationFolderName]" Order="4"
+                                     Condition="WixAppFolder = &quot;WixPerUserFolder&quot; AND NOT VELOPACK_INSTALLDIR"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Property="INSTALLFOLDER"
+                                     Value="{{ProgramFilesFolderName}}[ApplicationFolderName]" Order="5"
+                                     Condition="WixAppFolder = &quot;WixPerMachineFolder&quot; AND NOT VELOPACK_INSTALLDIR"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Property="INSTALLFOLDER"
+                                     Value="[VELOPACK_INSTALLDIR]" Order="5" Condition="VELOPACK_INSTALLDIR"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Event="SetTargetPath" Value="INSTALLFOLDER" Order="6"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="8"/>
+                            <Publish Dialog="InstallScopeDlg" Control="Next" Event="DoAction" Value="FindRelatedProducts" Order="9"/>
+                        {{/if}}
+            
+                        {{#if InstallLocationCurrentUserOnly}}
+                            <Publish Dialog="WelcomeDlg" Control="Next" Property="INSTALLFOLDER"
+                                     Value="[LocalAppDataFolder][ApplicationFolderName]" Order="1"
+                                     Condition="NOT VELOPACK_INSTALLDIR"/>
+                            <Publish Dialog="WelcomeDlg" Control="Next" Property="INSTALLFOLDER"
+                                     Value="[VELOPACK_INSTALLDIR]" Order="1" Condition="VELOPACK_INSTALLDIR"/>
+                            <Publish Dialog="WelcomeDlg" Control="Next" Event="SetTargetPath" Value="INSTALLFOLDER" Order="2"/>
+                        {{/if}}
+            
+                        {{#if InstallLocationAllUsersOnly}}
+                            <Publish Dialog="WelcomeDlg" Control="Next" Property="INSTALLFOLDER"
+                                     Value="{{ProgramFilesFolderName}}[ApplicationFolderName]" Order="1"
+                                     Condition="NOT VELOPACK_INSTALLDIR"/>
+                            <Publish Dialog="WelcomeDlg" Control="Next" Property="INSTALLFOLDER"
+                                     Value="[VELOPACK_INSTALLDIR]" Order="1" Condition="VELOPACK_INSTALLDIR"/>
+                            <Publish Dialog="WelcomeDlg" Control="Next" Event="SetTargetPath" Value="INSTALLFOLDER" Order="2"/>
+                        {{/if}}
+            
+                        {{#if InstallLocationEither}}
+                            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="InstallScopeDlg" Order="1"
+                                     Condition="NOT Installed"/>
+                        {{else if HasLicense}}
+                            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" Order="1"
+                                     Condition="NOT Installed"/>
+                        {{else if HasReadme}}
+                            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ReadmeDlg" Order="1"
+                                     Condition="NOT Installed"/>
+                        {{else}}
+                            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="1"
+                                     Condition="NOT Installed"/>
+                        {{/if}}
+            
+                        <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="2"
+                                 Condition="Installed AND NOT PATCH"/>
+                        <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2"
+                                 Condition="Installed AND PATCH"/>
+            
+                        <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg"/>
+                        <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg"/>
+                        <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg"/>
+                        <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg"/>
+            
+                        <Property Id="ARPNOMODIFY" Value="1"/>
+                    </UI>
+                </Package>
+            </Wix>
+            """;
+        Assert.Equal(Handlebars.Compile(original + Environment.NewLine)(data), MsiBuilder.GenerateWixTemplate(data));
+    }
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData("low")]
+    [InlineData("medium")]
+    [InlineData("high")]
+    [InlineData("mszip")]
+    public void CompressionTemplate_UsesMediaTemplate(string level)
+    {
+        var source = MsiBuilder.GenerateWixTemplate(new MsiTemplateData {
+            AppTitle = "Example", AppPublisher = "Example", MainExeFileName = "app.exe", MsiCompression = level,
+        });
+        Assert.Contains($"<MediaTemplate EmbedCab=\"yes\" CompressionLevel=\"{level}\" />", source);
+        Assert.DoesNotContain("<Media Id=", source);
+    }
+}
