@@ -348,6 +348,27 @@ public class PackWindowsCommandTests : ReleaseCommandTests<WindowsPackCommand>
         Assert.DoesNotContain(result.Errors, e => e.PropertyName == "MsiVersionOverride");
     }
 
+    [WindowsOnlyTheory]
+    [InlineData("2e6e0d0b-7f0e-4e0a-9c1b-5a4d2e7b1c11")]
+    [InlineData("{2E6E0D0B-7F0E-4E0A-9C1B-5A4D2E7B1C11}")]
+    public void MsiUpgradeCode_WithGuid_MapsAndPassesValidation(string upgradeCode)
+    {
+        var options = ParseAndMap(GetRequiredDefaultOptions() + $"--msi --msiUpgradeCode {upgradeCode}");
+        var result = Validate(options);
+
+        Assert.Equal(upgradeCode, options.MsiUpgradeCode);
+        Assert.DoesNotContain(result.Errors, e => e.PropertyName == nameof(WindowsPackOptions.MsiUpgradeCode));
+    }
+
+    [WindowsOnlyFact]
+    public void MsiUpgradeCode_WithMalformedGuid_FailsValidation()
+    {
+        var options = ParseAndMap(GetRequiredDefaultOptions() + "--msi --msiUpgradeCode invalid");
+        var result = Validate(options);
+
+        Assert.Contains(result.Errors, e => e.ErrorMessage.Contains("msiUpgradeCode must be a hyphenated GUID"));
+    }
+
     protected override string GetRequiredDefaultOptions()
     {
         DirectoryInfo packDir = CreateTempDirectory();

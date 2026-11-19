@@ -177,8 +177,10 @@ public class MsiTests
         return (true, key.GetValue("DisplayVersion") as string);
     }
 
-    [Fact]
-    public async Task TestPackGeneratesMsi()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("{2E6E0D0B-7F0E-4E0A-9C1B-5A4D2E7B1C11}")]
+    public async Task TestPackGeneratesMsi(string upgradeCode)
     {
         Assert.SkipUnless(VelopackRuntimeInfo.IsWindows, "Windows only");
 
@@ -203,7 +205,8 @@ public class MsiTests
             TargetRuntime = RID.Parse("win-x64"),
             PackDirectory = tmpOutput,
             Shortcuts = "Desktop,StartMenuRoot",
-            BuildMsi = true
+            BuildMsi = true,
+            MsiUpgradeCode = upgradeCode
         };
 
         var runner = WindowsTestHelper.GetPackRunner(logger);
@@ -214,6 +217,11 @@ public class MsiTests
         using Database db = new Database(msiPath);
         var msiVersion = db.ExecuteScalar("SELECT `Value` FROM `Property` WHERE `Property` = 'ProductVersion'") as string;
         Assert.Equal("1.2.3.0", msiVersion);
+
+        var expectedUpgradeCode = upgradeCode == null ? GuidUtil.CreateGuidFromHash($"{id}:UpgradeCode") : Guid.Parse(upgradeCode);
+        var actualUpgradeCode = db.ExecuteScalar("SELECT `Value` FROM `Property` WHERE `Property` = 'UpgradeCode'") as string;
+        Assert.NotNull(actualUpgradeCode);
+        Assert.Equal(expectedUpgradeCode, Guid.Parse(actualUpgradeCode));
     }
 
     [Fact]

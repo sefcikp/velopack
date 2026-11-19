@@ -16,6 +16,9 @@ public sealed class WindowsPackOptionsValidator : PackOptionsValidator<WindowsPa
         RuleFor(x => x.SignExclude).MustBeValidRegex();
         RuleFor(x => x.AzureTrustedSignFile).MustBeExistingFile();
         RuleFor(x => x.MsiVersionOverride).MustBeValidMsiVersion();
+        RuleFor(x => x.MsiUpgradeCode)
+            .Must(v => v == null || Guid.TryParseExact(v, "D", out _) || Guid.TryParseExact(v, "B", out _))
+            .WithMessage("{PropertyName} must be a hyphenated GUID, with or without braces ('{PropertyValue}').");
         RuleFor(x => x.MsiTopBanner).MustHaveExtension(".bmp");
         RuleFor(x => x.MsiDialogBackground).MustHaveExtension(".bmp");
         RuleFor(x => x.InstWelcome).MustBeExistingFile();

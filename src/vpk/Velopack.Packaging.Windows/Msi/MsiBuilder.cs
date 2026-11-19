@@ -149,6 +149,7 @@ public static class MsiBuilder
         if (string.IsNullOrWhiteSpace(msiVersion)) {
             msiVersion = $"{parsedVersion.Major}.{parsedVersion.Minor}.{parsedVersion.Patch}.0";
         }
+        var upgradeCode = options.MsiUpgradeCode;
         
         return new MsiTemplateData() {
             WixId = wixId,
@@ -162,7 +163,9 @@ public static class MsiBuilder
             IsArm64 = options.TargetRuntime.Architecture is RuntimeCpu.arm64,
             InstallForAllUsers = options.InstLocation.HasFlag(InstallLocation.PerMachine),
             InstallForCurrentUser = options.InstLocation.HasFlag(InstallLocation.PerUser),
-            UpgradeCodeGuid = GuidUtil.CreateGuidFromHash($"{options.PackId}:UpgradeCode").ToString(),
+            UpgradeCodeGuid = upgradeCode == null
+                ? GuidUtil.CreateGuidFromHash($"{options.PackId}:UpgradeCode").ToString()
+                : Guid.Parse(upgradeCode).ToString(),
             ComponentGenerationSeedGuid = GuidUtil.CreateGuidFromHash($"{options.PackId}:INSTALLFOLDER").ToString(),
             IconPath = options.Icon,
             StubFileName = (options.PackTitle ?? options.PackId) + ".exe",

@@ -112,6 +112,8 @@ public class PackTask : MSBuildAsyncTask
 
     public string? MsiVersionOverride { get; set; }
 
+    public string? MsiUpgradeCode { get; set; }
+
     protected override async Task<bool> ExecuteAsync(CancellationToken cancellationToken)
     {
         //System.Diagnostics.Debugger.Launch();
