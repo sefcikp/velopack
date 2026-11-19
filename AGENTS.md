@@ -13,12 +13,12 @@ This repository is a public fork of [velopack/velopack](https://github.com/velop
 | Branch | Base | Purpose |
 |---|---|---|
 | `develop` | `upstream/develop` | Exact mirror of upstream. Never commit to it; update with GitHub "Sync fork" or `git fetch upstream && git merge --ff-only upstream/develop`. |
-| `custom/base` | `develop` | `develop` plus only the fork's housekeeping files (this file, `.claude/rules/custom-fork.md`). |
+| `custom/base` | last upstream release tag | The last upstream release tag (currently `1.3.39-g8d2844f`) plus only the fork's housekeeping files (this file, `.claude/rules/custom-fork.md`). |
 | `feat/*`, `fix/*` | `custom/base` | One self-contained, generic change each, written so it can be offered upstream. |
 | `custom/main` | `custom/base` | Integration branch: `custom/base` plus merges of the feature branches. Releases are built only from here. |
 
 - Upstream PR from a feature branch: `git rebase --onto upstream/develop custom/base <branch>` into a separate PR branch, so the housekeeping commit is not included.
-- Updating upstream: update `develop`, rebase `custom/base` onto it, rebase the feature branches onto `custom/base`, rebuild `custom/main` from `custom/base` by merging the feature branches again.
+- Updating upstream: fetch the new upstream release tag, rebase `custom/base` onto it, rebase the feature branches onto `custom/base`, rebuild `custom/main` from `custom/base` by merging the feature branches again, and rebuild the release with the new tag as base (see Releases). `develop` is kept as a plain upstream mirror.
 - When upstream merges one of our changes, drop that feature branch from `custom/main`.
 
 ## Changes
@@ -31,5 +31,8 @@ This repository is a public fork of [velopack/velopack](https://github.com/velop
 
 ## Releases
 
-- `version.json` on `custom/main` produces `-custom.N` versions; never publish packages under upstream's package ids to public feeds.
-- Build `vpk` (with its embedded `Update.exe`) and the native libraries from the same `custom/main` commit; consumers require matching versions.
+- `version.json` on `custom/main` pins the version to `<base major.minor.patch>-custom.N` (e.g. `1.3.39-custom.1`); bump `N` on every release. Never publish packages under upstream's package ids to public feeds (nuget.org etc.).
+- The custom changes are managed (C#) only. A custom release is the official upstream binaries of the base tag (native helpers inside the `vpk` package, and the separate `velopack_libc` SDK) plus the custom managed code. Do not build or replace Rust/native binaries unless a change needs it.
+- Build the `vpk` tool package with `custom/build-vpk.ps1` (Windows, PowerShell 7, .NET SDK, no Rust). It takes the native helpers from the official upstream `vpk` package of `-UpstreamVersion`, packs them next to the custom managed code, checks that they are byte-identical to the official ones, and smoke-tests the result. Record the base tag in the release notes.
+- Consumers keep `major.minor.patch` of the tool and of the `velopack_libc` SDK equal (both come from the same base tag).
+- Release tags: `v<version>` on `custom/main`, e.g. `v1.3.39-custom.1`. Release assets: the nupkg and `SHA256SUMS`.
