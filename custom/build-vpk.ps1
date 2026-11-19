@@ -138,8 +138,10 @@ try {
         if ($help -notmatch [regex]::Escape($opt)) { throw "Installed tool does not list $opt in 'pack --help'" }
     }
     if ($LASTEXITCODE -ne 0) { throw "Installed tool 'pack --help' failed" }
-    $reportedVersion = (& $vpkExe --version 2>&1 | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or ($reportedVersion -split '\+')[0] -ne $expectedVersion) {
+    $rootHelp = (& $vpkExe --help 2>&1 | Out-String)
+    $versionMatch = [regex]::Match($rootHelp, 'Velopack CLI (\S+)')
+    $reportedVersion = $versionMatch.Groups[1].Value
+    if ($LASTEXITCODE -ne 0 -or $reportedVersion -ne $expectedVersion) {
         throw "Installed tool version '$reportedVersion' does not match '$expectedVersion'"
     }
     Write-Host "Smoke test passed (custom MSI options present; version $reportedVersion)."
